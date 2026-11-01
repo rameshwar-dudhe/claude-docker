@@ -1,0 +1,123 @@
+CLAUDE CODE IN DOCKER - SETUP
+Copy and paste each block into the Terminal, in order.
+
+=== STEP 1: INSTALL DOCKER ===
+Option A (easiest): download Docker Desktop from
+https://www.docker.com/products/docker-desktop/ , open it, wait until it says running.
+
+Option B (Homebrew, no GUI):
+
+brew install colima docker docker-compose
+colima start
+
+Check it works:
+
+docker --version
+docker compose version
+
+=== STEP 2: CREATE THE PROJECT FILES ===
+Paste this whole block. It creates ~/claude-docker with both files.
+
+mkdir -p ~/claude-docker/workspace && cd ~/claude-docker
+
+cat > Dockerfile <<'EOF'
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git curl ca-certificates openssh-client ripgrep less procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Run as non-root user
+RUN useradd -m -s /bin/bash claude
+USER claude
+ENV HOME=/home/claude
+WORKDIR /workspace
+
+CMD ["claude"]
+EOF
+
+cat > docker-compose.yml <<'EOF'
+# Usage:
+#   docker compose run --rm claude
+#
+# Project folder: set PROJECT_DIR to any folder on your machine (default: ./workspace)
+#   PROJECT_DIR=~/Projects/myapp docker compose run --rm claude
+#
+# Shortcut alias (add to ~/.zshrc on your machine, then `cd` into a project and run `claude-d`):
+#   alias claude-d='docker run -it --rm -v "$PWD":/workspace -v claude-config:/home/claude/.claude claude-code:latest'
+#
+# With SSH keys (for git push), uncomment the ssh line below, or for the alias add:
+#   -v ~/.ssh:/home/claude/.ssh:ro
+
+services:
+  claude:
+    build: .
+    image: claude-code:latest
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    # Uncomment if files created in the container have permission problems:
+    # user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Your project files (read/write)
+      - ${PROJECT_DIR:-./workspace}:/workspace
+      # Keeps login/settings between runs
+      - claude-config:/home/claude/.claude
+      # Optional: SSH keys for git push (read-only)
+      # - ~/.ssh:/home/claude/.ssh:ro
+      # Optional: git identity
+      # - ~/.gitconfig:/home/claude/.gitconfig:ro
+
+volumes:
+  claude-config:
+EOF
+
+=== STEP 3: BUILD THE IMAGE (ONCE) ===
+
+cd ~/claude-docker
+docker compose build
+
+=== STEP 4: RUN CLAUDE ===
+Default folder (~/claude-docker/workspace):
+
+cd ~/claude-docker
+docker compose run --rm claude
+
+Or your own project folder:
+
+cd ~/claude-docker
+PROJECT_DIR=~/Projects/myapp docker compose run --rm claude
+
+=== STEP 5: LOG IN (FIRST TIME ONLY) ===
+Claude shows a login URL. Open it in your browser, sign in to your Claude
+account, and paste the code back into Terminal. The login is saved in the
+claude-config volume, so you won't need to do this again.
+
+=== OPTIONAL: SHORTCUT COMMAND ===
+Paste this once. Afterwards, cd into any project and type: claude-d
+
+echo 'alias claude-d='"'"'docker run -it --rm -v "$PWD":/workspace -v claude-config:/home/claude/.claude claude-code:latest'"'"'' >> ~/.zshrc
+source ~/.zshrc
+
+=== OPTIONAL: OTHER WAYS TO LOG IN ===
+Token (run "claude setup-token" on a machine where you're already logged in):
+
+export CLAUDE_CODE_OAUTH_TOKEN=<your-token>
+docker compose run --rm claude
+
+API key:
+
+ANTHROPIC_API_KEY=sk-ant-... docker compose run --rm claude
+
+=== NOTES ===
+- Claude only sees folders you mount (/workspace). It can't see the rest of your machine.
+- Commands Claude runs execute inside the container. If your project needs Python,
+  Java, etc., add the install to the Dockerfile and run: docker compose build
+- For git push, uncomment the ~/.ssh line in docker-compose.yml.
+- To exit Claude, type /exit.

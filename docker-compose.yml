@@ -1,0 +1,36 @@
+# Usage:
+#   docker compose run --rm claude
+#
+# Project folder: set PROJECT_DIR to any folder on your machine (default: ./workspace)
+#   PROJECT_DIR=~/Projects/myapp docker compose run --rm claude
+#
+# Shortcut alias (add to ~/.zshrc on your machine, then `cd` into a project and run `claude-d`):
+#   alias claude-d='docker run -it --rm -v "$PWD":/workspace -v claude-config:/home/claude/.claude claude-code:latest'
+#
+# With SSH keys (for git push), uncomment the ssh line below, or for the alias add:
+#   -v ~/.ssh:/home/claude/.ssh:ro
+
+services:
+  claude:
+    build: .
+    image: claude-code:latest
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    # Uncomment if files created in the container have permission problems:
+    # user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Your project files (read/write)
+      - ${PROJECT_DIR:-./workspace}:/workspace
+      # Keeps login/settings between runs
+      - claude-config:/home/claude/.claude
+      # Optional: SSH keys for git push (read-only)
+      # - ~/.ssh:/home/claude/.ssh:ro
+      # Optional: git identity
+      # - ~/.gitconfig:/home/claude/.gitconfig:ro
+
+volumes:
+  claude-config:
